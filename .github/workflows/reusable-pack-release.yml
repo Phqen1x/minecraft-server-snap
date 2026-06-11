@@ -128,8 +128,14 @@ jobs:
           PACK_NAME="${{ needs.build-artifacts.outputs.pack-name }}"
           PACK_VERSION="${{ needs.build-artifacts.outputs.pack-version }}"
           SLUG=$(echo "$PACK_NAME" | tr '[:upper:]' '[:lower:]' | sed "s/[^a-z0-9]/-/g" | sed 's/-\+/-/g' | sed 's/^-\|-$//g')
-          sed -i "s/productName: .*/productName: \"$PACK_NAME\"/" launcher/electron-builder.yml
-          sed -i "s/appId: .*/appId: \"com.minecraft.${SLUG}\"/" launcher/electron-builder.yml
+          python3 -c "
+import re, sys
+content = open('launcher/electron-builder.yml').read()
+name, slug = sys.argv[1], sys.argv[2]
+content = re.sub(r'productName:.*', 'productName: \"' + name + '\"', content)
+content = re.sub(r'appId:.*', 'appId: \"com.minecraft.' + slug + '\"', content)
+open('launcher/electron-builder.yml', 'w').write(content)
+" "$PACK_NAME" "$SLUG"
           jq --arg name "$SLUG" --arg version "$PACK_VERSION" '.name = $name | .version = $version' launcher/package.json > launcher/package.json.tmp && mv launcher/package.json.tmp launcher/package.json
 
       - uses: actions/setup-node@v6
@@ -176,8 +182,14 @@ jobs:
           PACK_NAME="${{ needs.build-artifacts.outputs.pack-name }}"
           PACK_VERSION="${{ needs.build-artifacts.outputs.pack-version }}"
           SLUG=$(echo "$PACK_NAME" | tr '[:upper:]' '[:lower:]' | sed "s/[^a-z0-9]/-/g" | sed 's/-\+/-/g' | sed 's/^-\|-$//g')
-          sed -i "s/productName: .*/productName: \"$PACK_NAME\"/" launcher/electron-builder.yml
-          sed -i "s/appId: .*/appId: \"com.minecraft.${SLUG}\"/" launcher/electron-builder.yml
+          python3 -c "
+import re, sys
+content = open('launcher/electron-builder.yml').read()
+name, slug = sys.argv[1], sys.argv[2]
+content = re.sub(r'productName:.*', 'productName: \"' + name + '\"', content)
+content = re.sub(r'appId:.*', 'appId: \"com.minecraft.' + slug + '\"', content)
+open('launcher/electron-builder.yml', 'w').write(content)
+" "$PACK_NAME" "$SLUG"
           jq --arg name "$SLUG" --arg version "$PACK_VERSION" '.name = $name | .version = $version' launcher/package.json > launcher/package.json.tmp && mv launcher/package.json.tmp launcher/package.json
 
       - uses: actions/setup-node@v6
@@ -222,8 +234,14 @@ jobs:
           PACK_NAME="${{ needs.build-artifacts.outputs.pack-name }}"
           PACK_VERSION="${{ needs.build-artifacts.outputs.pack-version }}"
           SLUG=$(echo "$PACK_NAME" | tr '[:upper:]' '[:lower:]' | sed "s/[^a-z0-9]/-/g" | sed 's/-\+/-/g' | sed 's/^-\|-$//g')
-          sed -i '' "s/productName: .*/productName: \"$PACK_NAME\"/" launcher/electron-builder.yml
-          sed -i '' "s/appId: .*/appId: \"com.minecraft.${SLUG}\"/" launcher/electron-builder.yml
+          python3 -c "
+import re, sys
+content = open('launcher/electron-builder.yml').read()
+name, slug = sys.argv[1], sys.argv[2]
+content = re.sub(r'productName:.*', 'productName: \"' + name + '\"', content)
+content = re.sub(r'appId:.*', 'appId: \"com.minecraft.' + slug + '\"', content)
+open('launcher/electron-builder.yml', 'w').write(content)
+" "$PACK_NAME" "$SLUG"
           jq --arg name "$SLUG" --arg version "$PACK_VERSION" '.name = $name | .version = $version' launcher/package.json > launcher/package.json.tmp && mv launcher/package.json.tmp launcher/package.json
 
       - uses: actions/setup-node@v6
