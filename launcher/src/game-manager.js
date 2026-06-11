@@ -12,6 +12,7 @@ const { pipeline } = require('stream/promises')
 
 const VERSION_MANIFEST = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json'
 const FABRIC_META = 'https://meta.fabricmc.net/v2'
+const FORGE_MAVEN = 'https://maven.minecraftforge.net/net/minecraftforge/forge'
 const JAVA_MANIFEST = 'https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json'
 
 function fetchJson(url) {
@@ -157,9 +158,22 @@ class GameManager {
     this._gameProcess = null
   }
 
+  get isForge() {
+    return this.manifest.mod_loader === 'forge'
+  }
+
   get fabricVersionId() {
-    const { minecraft_version, mod_loader_version, installer_version } = this.manifest
+    const { minecraft_version, mod_loader_version } = this.manifest
     return `fabric-loader-${mod_loader_version}-${minecraft_version}`
+  }
+
+  get forgeVersionId() {
+    const { minecraft_version, mod_loader_version } = this.manifest
+    return `${minecraft_version}-forge-${mod_loader_version}`
+  }
+
+  get loaderVersionId() {
+    return this.isForge ? this.forgeVersionId : this.fabricVersionId
   }
 
   get javaExecutable() {
@@ -172,20 +186,13 @@ class GameManager {
 
   getStatus() {
     return {
-      installed: this._installed || fs.existsSync(path.join(this.versionsDir, this.fabricVersionId)),
+      installed: this._installed || fs.existsSync(path.join(this.versionsDir, this.loaderVersionId)),
       running: this._gameProcess !== null,
     }
   }
 
   async install(onProgress) {
     const report = (stage, pct) => onProgress && onProgress({ stage, pct })
-
-    if (this.manifest.mod_loader && this.manifest.mod_loader !== 'fabric') {
-      throw new Error(
-        `Launcher only supports Fabric. This pack uses ${this.manifest.mod_loader}. ` +
-        `Use Prism Launcher or CurseForge App to play this modpack.`
-      )
-    }
 
     report('Fetching version info...', 0)
     const versionJson = await this._fetchVersionJson()
@@ -206,8 +213,13 @@ class GameManager {
     report('Extracting natives...', 82)
     await this._extractNatives(versionJson)
 
-    report('Installing Fabric...', 85)
-    await this._installFabric()
+    if (this.isForge) {
+      report('Installing Forge...', 85)
+      await this._installForge((p) => report('Installing Forge...', 85 + Math.round(p * 10)))
+    } else {
+      report('Installing Fabric...', 85)
+      await this._installFabric()
+    }
 
     report('Installing mods...', 95)
     if (this.versionManager) {
@@ -461,6 +473,34 @@ class GameManager {
     }
   }
 
+  async _installForge(onProgress) {
+    const { minecraft_version, mod_loader_version } = this.manifest
+    const forgeId = `${minecraft_version}-${mod_loader_version}`
+    const installerUrl = `${FORGE_MAVEN}/${forgeId}/forge-${forgeId}-installer.jar`
+    const installerDest = path.join(this.gameDir, `forge-installer-${forgeId}.jar`)
+
+    if (!fs.existsSync(installerDest)) {
+      await downloadFile(installerUrl, installerDest, (p) => onProgress && onProgress(p * 0.5))
+    }
+    onProgress && onProgress(0.5)
+
+    await new Promise((resolve, reject) => {
+      const proc = spawn(
+        this.javaExecutable,
+        ['-jar', installerDest, '--installClient'],
+        { cwd: this.gameDir, stdio: ['ignore', 'pipe', 'pipe'] }
+      )
+      proc.on('exit', (code) => {
+        if (code === 0) resolve()
+        else reject(new Error(`Forge installer exited with code ${code}`))
+      })
+      proc.on('error', reject)
+    })
+    onProgress && onProgress(1)
+
+    await fsp.unlink(installerDest).catch(() => {})
+  }
+
   async _installMods() {
     const modsDir = path.join(this.instanceDir, 'mods')
     await fsp.mkdir(modsDir, { recursive: true })
@@ -533,9 +573,10 @@ class GameManager {
         'utf8'
       )
     )
-    const fabricJson = JSON.parse(
+    const loaderVersionId = this.loaderVersionId
+    const loaderJson = JSON.parse(
       await fsp.readFile(
-        path.join(this.versionsDir, this.fabricVersionId, `${this.fabricVersionId}.json`),
+        path.join(this.versionsDir, loaderVersionId, `${loaderVersionId}.json`),
         'utf8'
       )
     )
@@ -549,12 +590,12 @@ class GameManager {
       await this._installShaders()
     }
 
-    const classpath = this._buildClasspath(versionJson, fabricJson)
-    const jvmArgs = this._buildJvmArgs(versionJson, fabricJson, playerSettings)
-    const gameArgs = this._buildGameArgs(fabricJson, authProfile, versionJson)
+    const classpath = this._buildClasspath(versionJson, loaderJson)
+    const jvmArgs = this._buildJvmArgs(versionJson, loaderJson, playerSettings)
+    const gameArgs = this._buildGameArgs(loaderJson, authProfile, versionJson)
 
     const java = this.javaExecutable
-    const args = [...jvmArgs, fabricJson.mainClass || versionJson.mainClass, ...gameArgs]
+    const args = [...jvmArgs, loaderJson.mainClass || versionJson.mainClass, ...gameArgs]
 
     onEvent && onEvent({ type: 'launching' })
 
@@ -585,7 +626,7 @@ class GameManager {
     return { ok: true }
   }
 
-  _buildClasspath(versionJson, fabricJson) {
+  _buildClasspath(versionJson, loaderJson) {
     const jars = []
 
     // Vanilla libraries
@@ -595,10 +636,13 @@ class GameManager {
       if (artifact) jars.push(path.join(this.librariesDir, artifact.path))
     }
 
-    // Fabric libraries
-    for (const lib of fabricJson.libraries || []) {
-      const libPath = getLibraryPath(lib.name)
-      jars.push(path.join(this.librariesDir, libPath))
+    // Loader libraries (Forge uses downloads.artifact; Fabric uses name-only)
+    for (const lib of loaderJson.libraries || []) {
+      if (lib.downloads?.artifact) {
+        jars.push(path.join(this.librariesDir, lib.downloads.artifact.path))
+      } else if (lib.name) {
+        jars.push(path.join(this.librariesDir, getLibraryPath(lib.name)))
+      }
     }
 
     // Client JAR
@@ -612,7 +656,7 @@ class GameManager {
     return jars.join(sep)
   }
 
-  _buildJvmArgs(versionJson, fabricJson, playerSettings) {
+  _buildJvmArgs(versionJson, loaderJson, playerSettings) {
     // Memory: player setting > pack yaml > default 4G
     const memory = playerSettings?.memory || null
     let memArgs
@@ -630,7 +674,7 @@ class GameManager {
     }
 
     const nativesDir = path.join(this.versionsDir, this.manifest.minecraft_version, 'natives')
-    const classpath = this._buildClasspath(versionJson, fabricJson)
+    const classpath = this._buildClasspath(versionJson, loaderJson)
 
     const args = [
       ...memArgs,
@@ -661,6 +705,11 @@ class GameManager {
     // native paths, LWJGL config, etc.) — this is what Prism/Lunar do
     const mojangJvmArgs = this._parseMojangJvmArgs(versionJson, nativesDir, classpath)
     args.push(...mojangJvmArgs)
+
+    // Forge adds module-path and other JVM args in its own version JSON
+    if (this.isForge && loaderJson.arguments?.jvm) {
+      args.push(...this._parseMojangJvmArgs(loaderJson, nativesDir, classpath))
+    }
 
     // Ensure our essentials are present (Mojang args may set these too, but
     // duplicates are harmless for -D properties)
@@ -752,11 +801,11 @@ class GameManager {
     await fsp.writeFile(serversDat, buildServersDatNbt(serverName, ip))
   }
 
-  _buildGameArgs(fabricJson, authProfile, versionJson) {
+  _buildGameArgs(loaderJson, authProfile, versionJson) {
     const assetIndex = versionJson.assetIndex?.id || this.manifest.minecraft_version
     return [
       '--username', authProfile.username,
-      '--version', this.fabricVersionId,
+      '--version', this.loaderVersionId,
       '--gameDir', this.instanceDir,
       '--assetsDir', this.assetsDir,
       '--assetIndex', assetIndex,
