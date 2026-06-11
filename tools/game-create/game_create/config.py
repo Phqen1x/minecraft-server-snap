@@ -45,8 +45,9 @@ class PackConfig:
         with open(path) as f:
             data = yaml.safe_load(f)
 
-        if data.get("mod_loader", "fabric") != "fabric":
-            raise ValueError("Only 'fabric' mod_loader is supported")
+        mod_loader = data.get("mod_loader", "fabric")
+        if mod_loader not in ("fabric", "forge"):
+            raise ValueError(f"mod_loader must be 'fabric' or 'forge', got {mod_loader!r}")
 
         mods = [
             Mod(

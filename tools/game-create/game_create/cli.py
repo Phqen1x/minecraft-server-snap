@@ -12,7 +12,8 @@ from rich.table import Table
 from .config import PackConfig
 from .downloader import download_file, download_mods
 from .fabric import get_server_jar_url, resolve_installer_version, resolve_loader_version
-from .packager import create_client_artifact, create_server_artifact
+from .forge import get_installer_url, resolve_forge_version
+from .packager import create_client_artifact, create_forge_server_artifact, create_server_artifact
 from .publisher import publish_release
 
 console = Console()
@@ -23,20 +24,34 @@ def build_artifacts(config: PackConfig, output_dir: Path, cache_dir: Path) -> tu
 
     console.rule(f"[bold cyan]Building {config.name} {config.version}")
 
-    # Resolve Fabric versions
-    console.print("[cyan]Resolving Fabric versions...")
-    loader_version = resolve_loader_version(config.minecraft_version, config.mod_loader_version)
-    installer_version = resolve_installer_version(config.installer_version)
-    console.print(f"  Loader:    {loader_version}")
-    console.print(f"  Installer: {installer_version}")
+    if config.mod_loader == "forge":
+        console.print("[cyan]Resolving Forge version...")
+        loader_version = resolve_forge_version(
+            config.minecraft_version, config.mod_loader_version
+        )
+        installer_version = "N/A"
+        console.print(f"  Forge:     {loader_version}")
 
-    # Download Fabric server JAR
-    server_jar_url = get_server_jar_url(
-        config.minecraft_version, loader_version, installer_version
-    )
-    server_jar = cache_dir / "server.jar"
-    console.print(f"\n[bold]Downloading Fabric server JAR...")
-    download_file(server_jar_url, server_jar, label="fabric-server.jar")
+        installer_url = get_installer_url(config.minecraft_version, loader_version)
+        installer_jar = cache_dir / f"forge-{config.minecraft_version}-{loader_version}-installer.jar"
+        console.print(f"\n[bold]Downloading Forge installer...")
+        download_file(installer_url, installer_jar, label="forge-installer.jar")
+    else:
+        # Fabric path
+        console.print("[cyan]Resolving Fabric versions...")
+        loader_version = resolve_loader_version(
+            config.minecraft_version, config.mod_loader_version
+        )
+        installer_version = resolve_installer_version(config.installer_version)
+        console.print(f"  Loader:    {loader_version}")
+        console.print(f"  Installer: {installer_version}")
+
+        server_jar_url = get_server_jar_url(
+            config.minecraft_version, loader_version, installer_version
+        )
+        server_jar = cache_dir / "server.jar"
+        console.print(f"\n[bold]Downloading Fabric server JAR...")
+        download_file(server_jar_url, server_jar, label="fabric-server.jar")
 
     # Download server mods
     server_mods_dir = cache_dir / "server_mods"
@@ -82,7 +97,10 @@ def build_artifacts(config: PackConfig, output_dir: Path, cache_dir: Path) -> tu
     # Create server artifact
     server_artifact = output_dir / "server.tar.xz"
     console.print(f"\n[bold]Creating server.tar.xz...")
-    create_server_artifact(server_jar, server_mod_paths, manifest, server_artifact)
+    if config.mod_loader == "forge":
+        create_forge_server_artifact(installer_jar, server_mod_paths, manifest, server_artifact)
+    else:
+        create_server_artifact(server_jar, server_mod_paths, manifest, server_artifact)
     console.print(f"  -> {server_artifact} ({server_artifact.stat().st_size // 1024 // 1024} MB)")
 
     # Create client artifact

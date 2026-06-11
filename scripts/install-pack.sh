@@ -3,6 +3,7 @@ set -euo pipefail
 
 SERVER_DIR="$SNAP_COMMON/server"
 TMP_DIR="$SNAP_COMMON/tmp/install-pack-$$"
+JAVA_BIN="$SNAP/usr/lib/jvm/java-21-openjdk-amd64/bin/java"
 
 usage() {
     echo "Usage: minecraft-server.install-pack <url-or-path>"
@@ -46,8 +47,13 @@ EXTRACT_DIR="$TMP_DIR/extract"
 mkdir -p "$EXTRACT_DIR"
 tar -xJf "$ARCHIVE" -C "$EXTRACT_DIR" --no-same-owner
 
-if [ ! -f "$EXTRACT_DIR/server/server.jar" ]; then
-    echo "Error: archive does not contain server/server.jar — is this a valid server.tar.xz?" >&2
+HAS_SERVER_JAR=false
+HAS_FORGE_INSTALLER=false
+[ -f "$EXTRACT_DIR/server/server.jar" ] && HAS_SERVER_JAR=true
+[ -f "$EXTRACT_DIR/server/forge-installer.jar" ] && HAS_FORGE_INSTALLER=true
+
+if [ "$HAS_SERVER_JAR" = false ] && [ "$HAS_FORGE_INSTALLER" = false ]; then
+    echo "Error: archive contains neither server.jar nor forge-installer.jar — is this a valid server.tar.xz?" >&2
     exit 1
 fi
 
@@ -58,13 +64,37 @@ if [ -f "$EXTRACT_DIR/server/manifest.json" ]; then
     echo "Installing: $NAME $VERSION"
 fi
 
-# Swap in new server directory
 mkdir -p "$SERVER_DIR"
-rm -rf "$SERVER_DIR/server.jar" "$SERVER_DIR/mods"
-cp "$EXTRACT_DIR/server/server.jar" "$SERVER_DIR/server.jar"
-if [ -d "$EXTRACT_DIR/server/mods" ]; then
-    cp -r "$EXTRACT_DIR/server/mods" "$SERVER_DIR/mods"
+
+if [ "$HAS_SERVER_JAR" = true ]; then
+    # Fabric / vanilla install
+    rm -rf "$SERVER_DIR/server.jar" "$SERVER_DIR/mods"
+    cp "$EXTRACT_DIR/server/server.jar" "$SERVER_DIR/server.jar"
+    if [ -d "$EXTRACT_DIR/server/mods" ]; then
+        cp -r "$EXTRACT_DIR/server/mods" "$SERVER_DIR/mods"
+    fi
+
+elif [ "$HAS_FORGE_INSTALLER" = true ]; then
+    # Forge install — run the installer to download MC + Forge libraries
+    rm -rf "$SERVER_DIR/mods" "$SERVER_DIR/libraries" "$SERVER_DIR/run.sh" \
+           "$SERVER_DIR/run.bat" "$SERVER_DIR/user_jvm_args.txt" \
+           "$SERVER_DIR/forge-installer.jar" "$SERVER_DIR/installer.log"
+
+    cp "$EXTRACT_DIR/server/forge-installer.jar" "$SERVER_DIR/forge-installer.jar"
+    echo "Running Forge installer (downloads Minecraft + Forge libraries, may take a few minutes)..."
+    cd "$SERVER_DIR"
+    if ! "$JAVA_BIN" -jar forge-installer.jar --installServer . 2>&1; then
+        echo "Error: Forge installer failed" >&2
+        rm -f forge-installer.jar
+        exit 1
+    fi
+    rm -f forge-installer.jar installer.log
+
+    if [ -d "$EXTRACT_DIR/server/mods" ]; then
+        cp -r "$EXTRACT_DIR/server/mods" "$SERVER_DIR/mods"
+    fi
 fi
+
 if [ -f "$EXTRACT_DIR/server/manifest.json" ]; then
     cp "$EXTRACT_DIR/server/manifest.json" "$SERVER_DIR/manifest.json"
 fi

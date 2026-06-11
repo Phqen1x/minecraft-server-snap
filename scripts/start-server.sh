@@ -8,9 +8,9 @@ mkdir -p "$SNAP_COMMON/tmp"
 mkdir -p "$SERVER_ROOT"
 cd "$SERVER_ROOT" || exit 1
 
-if [ ! -f "$JAR_FILE" ]; then
-    echo "ERROR: No server.jar found in $SERVER_ROOT"
-    echo "Please place your Vanilla/Forge/Fabric jar there and rename it to 'server.jar'."
+if [ ! -f "$JAR_FILE" ] && [ ! -f "$SERVER_ROOT/run.sh" ]; then
+    echo "ERROR: No server.jar or run.sh found in $SERVER_ROOT"
+    echo "Run: sudo minecraft-server.install-pack <url-or-path>"
     sleep 60
     exit 1
 fi
@@ -50,24 +50,37 @@ fi
 SERVER_MEMORY=$(snapctl get server-memory)
 SERVER_MEMORY=${SERVER_MEMORY:-2G}
 
-# Aikar's flags — optimized G1GC tuning for Minecraft servers
-exec java \
-  -Djava.io.tmpdir="$SNAP_COMMON/tmp" \
-  -Xms${SERVER_MEMORY} -Xmx${SERVER_MEMORY} \
-  -XX:+UseG1GC \
-  -XX:+ParallelRefProcEnabled \
-  -XX:MaxGCPauseMillis=200 \
-  -XX:+UnlockExperimentalVMOptions \
-  -XX:+DisableExplicitGC \
-  -XX:G1NewSizePercent=30 \
-  -XX:G1MaxNewSizePercent=40 \
-  -XX:G1HeapRegionSize=8M \
-  -XX:G1ReservePercent=20 \
-  -XX:G1MixedGCCountTarget=4 \
-  -XX:InitiatingHeapOccupancyPercent=15 \
-  -XX:G1MixedGCLiveThresholdPercent=90 \
-  -XX:SurvivorRatio=32 \
-  -XX:+UseNUMA \
-  -XX:+AlwaysPreTouch \
-  -XX:+UseStringDeduplication \
-  -jar "$JAR_FILE" nogui
+GC_FLAGS=(
+  -XX:+UseG1GC
+  -XX:+ParallelRefProcEnabled
+  -XX:MaxGCPauseMillis=200
+  -XX:+UnlockExperimentalVMOptions
+  -XX:+DisableExplicitGC
+  -XX:G1NewSizePercent=30
+  -XX:G1MaxNewSizePercent=40
+  -XX:G1HeapRegionSize=8M
+  -XX:G1ReservePercent=20
+  -XX:G1MixedGCCountTarget=4
+  -XX:InitiatingHeapOccupancyPercent=15
+  -XX:G1MixedGCLiveThresholdPercent=90
+  -XX:SurvivorRatio=32
+  -XX:+UseNUMA
+  -XX:+AlwaysPreTouch
+  -XX:+UseStringDeduplication
+)
+
+if [ -f "$SERVER_ROOT/run.sh" ]; then
+    # Forge 1.17+ — write JVM args to user_jvm_args.txt then launch via run.sh
+    printf -- '-Djava.io.tmpdir=%s\n-Xms%s\n-Xmx%s\n%s\n' \
+        "$SNAP_COMMON/tmp" "$SERVER_MEMORY" "$SERVER_MEMORY" \
+        "$(printf '%s\n' "${GC_FLAGS[@]}")" \
+        > "$SERVER_ROOT/user_jvm_args.txt"
+    exec sh "$SERVER_ROOT/run.sh" nogui
+else
+    # Fabric / vanilla — launch with -jar
+    exec java \
+      -Djava.io.tmpdir="$SNAP_COMMON/tmp" \
+      -Xms${SERVER_MEMORY} -Xmx${SERVER_MEMORY} \
+      "${GC_FLAGS[@]}" \
+      -jar "$JAR_FILE" nogui
+fi

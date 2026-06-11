@@ -27,6 +27,21 @@ def create_server_artifact(
         _add_json(tar, "server/manifest.json", manifest)
 
 
+def create_forge_server_artifact(
+    installer_jar: Path,
+    mod_paths: list[Path],
+    manifest: dict,
+    output: Path,
+) -> None:
+    """Bundle the Forge installer JAR + mods; the installer runs at install time."""
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(output, "w:xz") as tar:
+        tar.add(installer_jar, arcname="server/forge-installer.jar")
+        for mod in mod_paths:
+            tar.add(mod, arcname=f"server/mods/{mod.name}")
+        _add_json(tar, "server/manifest.json", manifest)
+
+
 def create_client_artifact(
     mod_paths: list[Path],
     manifest: dict,

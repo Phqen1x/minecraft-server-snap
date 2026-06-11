@@ -180,6 +180,13 @@ class GameManager {
   async install(onProgress) {
     const report = (stage, pct) => onProgress && onProgress({ stage, pct })
 
+    if (this.manifest.mod_loader && this.manifest.mod_loader !== 'fabric') {
+      throw new Error(
+        `Launcher only supports Fabric. This pack uses ${this.manifest.mod_loader}. ` +
+        `Use Prism Launcher or CurseForge App to play this modpack.`
+      )
+    }
+
     report('Fetching version info...', 0)
     const versionJson = await this._fetchVersionJson()
 
