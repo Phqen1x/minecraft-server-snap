@@ -54,15 +54,7 @@ jobs:
         run: pip install pyyaml --quiet
 
       - name: Install game-create
-        run: |
-          if [ "${{ inputs.tools-version }}" = "latest" ]; then
-            TOOLS_TAG=$(curl -s https://api.github.com/repos/kenvandine/minecraft-server-snap/releases/latest | jq -r .tag_name)
-          else
-            TOOLS_TAG="${{ inputs.tools-version }}"
-          fi
-          curl -L -o /usr/local/bin/game-create \
-            "https://github.com/kenvandine/minecraft-server-snap/releases/download/${TOOLS_TAG}/game-create-linux"
-          chmod +x /usr/local/bin/game-create
+        run: pip install "git+https://github.com/Phqen1x/minecraft-server-snap.git#subdirectory=tools/game-create" --quiet
 
       - name: Inject azure_client_id
         env:
