@@ -132,7 +132,7 @@ jobs:
           import re, sys
           content = open('launcher/electron-builder.yml').read()
           name, slug = sys.argv[1], sys.argv[2]
-          content = re.sub(r'productName:.*', 'productName: \"' + name + '\"', content)
+          content = re.sub(r'productName:.*', 'productName: \"' + name + '\"\nexecutableName: \"' + slug + '\"', content)
           content = re.sub(r'appId:.*', 'appId: \"com.minecraft.' + slug + '\"', content)
           open('launcher/electron-builder.yml', 'w').write(content)
           " "$PACK_NAME" "$SLUG"
@@ -186,7 +186,7 @@ jobs:
           import re, sys
           content = open('launcher/electron-builder.yml').read()
           name, slug = sys.argv[1], sys.argv[2]
-          content = re.sub(r'productName:.*', 'productName: \"' + name + '\"', content)
+          content = re.sub(r'productName:.*', 'productName: \"' + name + '\"\nexecutableName: \"' + slug + '\"', content)
           content = re.sub(r'appId:.*', 'appId: \"com.minecraft.' + slug + '\"', content)
           open('launcher/electron-builder.yml', 'w').write(content)
           " "$PACK_NAME" "$SLUG"
@@ -238,7 +238,7 @@ jobs:
           import re, sys
           content = open('launcher/electron-builder.yml').read()
           name, slug = sys.argv[1], sys.argv[2]
-          content = re.sub(r'productName:.*', 'productName: \"' + name + '\"', content)
+          content = re.sub(r'productName:.*', 'productName: \"' + name + '\"\nexecutableName: \"' + slug + '\"', content)
           content = re.sub(r'appId:.*', 'appId: \"com.minecraft.' + slug + '\"', content)
           open('launcher/electron-builder.yml', 'w').write(content)
           " "$PACK_NAME" "$SLUG"
