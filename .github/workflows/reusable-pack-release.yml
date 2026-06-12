@@ -175,6 +175,7 @@ jobs:
         run: |
           mkdir -p launcher/resources/mods
           tar -xJf pack-dist/client.tar.xz -C launcher/resources/
+          rm -rf pack-dist/
 
       - name: Update app name in electron-builder config
         shell: bash
@@ -198,6 +199,8 @@ jobs:
 
       - name: Install and build
         working-directory: launcher
+        env:
+          ELECTRON_BUILDER_PUBLISH: never
         run: |
           npm ci
           npm run build:win
