@@ -173,8 +173,11 @@ jobs:
       - name: Inject client artifact
         shell: bash
         run: |
+          # Extract only manifest.json — mods are downloaded at first launch so
+          # the 7z stays under GitHub's 2 GB release-asset limit.
           mkdir -p launcher/resources/mods
-          tar -xJf pack-dist/client.tar.xz -C launcher/resources/
+          tar -xJf pack-dist/client.tar.xz -C launcher/resources/ manifest.json
+          tar -xJf pack-dist/client.tar.xz -C launcher/resources/ shaderpacks 2>/dev/null || true
           rm -rf pack-dist/
 
       - name: Update app name in electron-builder config

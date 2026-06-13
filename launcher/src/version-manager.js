@@ -281,16 +281,30 @@ class VersionManager {
     const manifestSrc = path.join(this.resourcesPath, 'manifest.json')
     await fsp.copyFile(manifestSrc, path.join(packDir, 'manifest.json'))
 
-    // Copy mods
+    // Copy bundled mods (present on Linux/macOS) or download from URL (Windows)
     const srcModsDir = path.join(this.resourcesPath, 'mods')
-    if (fs.existsSync(srcModsDir)) {
-      const files = await fsp.readdir(srcModsDir)
-      for (const file of files) {
-        if (!file.endsWith('.jar')) continue
-        await fsp.copyFile(
-          path.join(srcModsDir, file),
-          path.join(packDir, 'mods', file)
-        )
+    const bundledFiles = fs.existsSync(srcModsDir)
+      ? (await fsp.readdir(srcModsDir)).filter(f => f.endsWith('.jar'))
+      : []
+    const bundledSet = new Set(bundledFiles)
+
+    for (const file of bundledFiles) {
+      await fsp.copyFile(
+        path.join(srcModsDir, file),
+        path.join(packDir, 'mods', file)
+      )
+    }
+
+    // Download mods not bundled (URL-based delivery)
+    const manifest = JSON.parse(await fsp.readFile(path.join(packDir, 'manifest.json'), 'utf8'))
+    const manifestMods = manifest.mods || []
+    const downloadable = manifestMods.filter(m => m.url && !bundledSet.has(m.filename))
+    for (let i = 0; i < downloadable.length; i++) {
+      const mod = downloadable[i]
+      const dest = path.join(packDir, 'mods', mod.filename)
+      if (!fs.existsSync(dest)) {
+        report(`Downloading mods... (${i + 1}/${downloadable.length})`, 10 + Math.round((i / downloadable.length) * 80))
+        await downloadFile(mod.url, dest)
       }
     }
 

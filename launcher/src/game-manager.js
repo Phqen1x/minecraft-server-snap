@@ -501,30 +501,44 @@ class GameManager {
     await fsp.unlink(installerDest).catch(() => {})
   }
 
-  async _installMods() {
+  async _installMods(onProgress) {
     const modsDir = path.join(this.instanceDir, 'mods')
     await fsp.mkdir(modsDir, { recursive: true })
 
     const srcModsDir = path.join(this.resourcesPath, 'mods')
-    if (!fs.existsSync(srcModsDir)) return
-
-    // Determine which mod files the current pack ships
-    const bundledFiles = (await fsp.readdir(srcModsDir)).filter(f => f.endsWith('.jar'))
+    const bundledFiles = fs.existsSync(srcModsDir)
+      ? (await fsp.readdir(srcModsDir)).filter(f => f.endsWith('.jar'))
+      : []
     const bundledSet = new Set(bundledFiles)
 
-    // Copy new or updated mods
+    // Copy bundled mods
     for (const file of bundledFiles) {
-      const src = path.join(srcModsDir, file)
       const dest = path.join(modsDir, file)
       if (!fs.existsSync(dest)) {
-        await fsp.copyFile(src, dest)
+        await fsp.copyFile(path.join(srcModsDir, file), dest)
       }
     }
 
-    // Remove mods that were bundled by a previous version but are no longer shipped
+    // Download mods that have a URL but are not bundled (e.g. on Windows where
+    // the launcher ships without the mod payload to stay under GitHub's 2 GB limit)
+    const manifestMods = this.manifest.mods || []
+    const total = manifestMods.filter(m => m.url && !bundledSet.has(m.filename)).length
+    let done = 0
+    for (const mod of manifestMods) {
+      if (!mod.url || bundledSet.has(mod.filename)) continue
+      const dest = path.join(modsDir, mod.filename)
+      if (!fs.existsSync(dest)) {
+        await downloadFile(mod.url, dest)
+      }
+      done++
+      if (onProgress && total) onProgress(done / total)
+    }
+
+    // Remove mods no longer in the manifest
+    const manifestFilenames = new Set(manifestMods.map(m => m.filename))
     const installedFiles = (await fsp.readdir(modsDir)).filter(f => f.endsWith('.jar'))
     for (const file of installedFiles) {
-      if (!bundledSet.has(file)) {
+      if (!bundledSet.has(file) && !manifestFilenames.has(file)) {
         await fsp.unlink(path.join(modsDir, file))
       }
     }

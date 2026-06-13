@@ -85,7 +85,7 @@ def build_artifacts(config: PackConfig, output_dir: Path, cache_dir: Path) -> tu
         "port": config.port,
         "github_repo": config.github_repo,
         "mods": [
-            {"name": m.name, "filename": p.name, "side": m.side}
+            {"name": m.name, "filename": p.name, "url": m.url, "side": m.side}
             for m, p in zip(config.client_mods(), client_mod_paths)
         ],
         "shader_packs": [
