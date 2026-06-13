@@ -189,6 +189,9 @@ jobs:
           name, slug = sys.argv[1], sys.argv[2]
           content = re.sub(r'productName:.*', 'productName: \"' + name + '\"\nexecutableName: \"' + slug + '\"', content)
           content = re.sub(r'appId:.*', 'appId: \"com.minecraft.' + slug + '\"', content)
+          # Switch from nsis to zip — nsis (32-bit makensis.exe) cannot mmap files > 2 GB,
+          # which fails when the bundled mod payload exceeds that threshold.
+          content = re.sub(r'(- target:\s*)nsis', r'\1zip', content)
           open('launcher/electron-builder.yml', 'w').write(content)
           " "$PACK_NAME" "$SLUG"
           jq --arg name "$SLUG" --arg version "$PACK_VERSION" '.name = $name | .version = $version' launcher/package.json > launcher/package.json.tmp && mv launcher/package.json.tmp launcher/package.json
@@ -208,7 +211,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: launcher-windows
-          path: launcher/dist/*.exe
+          path: launcher/dist/*.zip
 
   build-launcher-mac:
     name: Build launcher (macOS arm64)
@@ -293,14 +296,14 @@ jobs:
 
             **Client**:
             - **Linux**: Download the `.AppImage`, make it executable, run it
-            - **Windows**: Download and run the `.exe` installer
+            - **Windows**: Download the `.zip`, extract it, and run the `.exe` inside
             - **macOS (M4/Apple Silicon)**: Download the `.dmg`, open it, drag to Applications
           files: |
             all-artifacts/server.tar.xz
             all-artifacts/client.tar.xz
             all-artifacts/pack.yaml
             all-artifacts/*.AppImage
-            all-artifacts/*.exe
+            all-artifacts/*.zip
             all-artifacts/*.dmg
           generate_release_notes: false
         env:
