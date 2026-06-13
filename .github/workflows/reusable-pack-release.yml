@@ -206,7 +206,7 @@ jobs:
           ELECTRON_BUILDER_PUBLISH: never
         run: |
           npm ci
-          npm run build:win
+          npx electron-builder --win zip
 
       - uses: actions/upload-artifact@v7
         with:
