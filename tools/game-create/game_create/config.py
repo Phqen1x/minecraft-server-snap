@@ -8,12 +8,15 @@ import yaml
 @dataclass
 class Mod:
     name: str
-    url: str
     side: str = "both"  # both | server | client
+    url: Optional[str] = None   # remote download URL
+    path: Optional[str] = None  # local file path relative to pack.yaml
 
     def __post_init__(self):
         if self.side not in ("both", "server", "client"):
             raise ValueError(f"Mod '{self.name}': side must be both, server, or client")
+        if not self.url and not self.path:
+            raise ValueError(f"Mod '{self.name}': must have either 'url' or 'path'")
 
 
 @dataclass
@@ -46,14 +49,15 @@ class PackConfig:
             data = yaml.safe_load(f)
 
         mod_loader = data.get("mod_loader", "fabric")
-        if mod_loader not in ("fabric", "forge"):
-            raise ValueError(f"mod_loader must be 'fabric' or 'forge', got {mod_loader!r}")
+        if mod_loader not in ("fabric", "forge", "neoforge"):
+            raise ValueError(f"mod_loader must be 'fabric', 'forge', or 'neoforge', got {mod_loader!r}")
 
         mods = [
             Mod(
                 name=m["name"],
-                url=m["url"],
                 side=m.get("side", "both"),
+                url=m.get("url"),
+                path=m.get("path"),
             )
             for m in data.get("mods", [])
         ]

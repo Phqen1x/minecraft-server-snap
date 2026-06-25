@@ -12,19 +12,34 @@ from rich.table import Table
 from .config import PackConfig
 from .downloader import download_file, download_mods
 from .fabric import get_server_jar_url, resolve_installer_version, resolve_loader_version
-from .forge import get_installer_url, resolve_forge_version
+from .forge import get_installer_url as get_forge_installer_url, resolve_forge_version
+from .neoforge import get_installer_url as get_neoforge_installer_url, resolve_neoforge_version
 from .packager import create_client_artifact, create_forge_server_artifact, create_server_artifact
 from .publisher import publish_release
 
 console = Console()
 
 
-def build_artifacts(config: PackConfig, output_dir: Path, cache_dir: Path) -> tuple[Path, Path]:
+def build_artifacts(config: PackConfig, output_dir: Path, cache_dir: Path, pack_dir: Path | None = None) -> tuple[Path, Path]:
     """Download all components and produce server.tar.xz and client.tar.xz."""
 
+    pack_dir = pack_dir or Path(".")
     console.rule(f"[bold cyan]Building {config.name} {config.version}")
 
-    if config.mod_loader == "forge":
+    if config.mod_loader == "neoforge":
+        console.print("[cyan]Resolving NeoForge version...")
+        loader_version = resolve_neoforge_version(
+            config.minecraft_version, config.mod_loader_version
+        )
+        installer_version = "N/A"
+        console.print(f"  NeoForge:  {loader_version}")
+
+        installer_url = get_neoforge_installer_url(loader_version)
+        installer_jar = cache_dir / f"neoforge-{loader_version}-installer.jar"
+        console.print(f"\n[bold]Downloading NeoForge installer...")
+        download_file(installer_url, installer_jar, label="neoforge-installer.jar")
+
+    elif config.mod_loader == "forge":
         console.print("[cyan]Resolving Forge version...")
         loader_version = resolve_forge_version(
             config.minecraft_version, config.mod_loader_version
@@ -32,10 +47,11 @@ def build_artifacts(config: PackConfig, output_dir: Path, cache_dir: Path) -> tu
         installer_version = "N/A"
         console.print(f"  Forge:     {loader_version}")
 
-        installer_url = get_installer_url(config.minecraft_version, loader_version)
+        installer_url = get_forge_installer_url(config.minecraft_version, loader_version)
         installer_jar = cache_dir / f"forge-{config.minecraft_version}-{loader_version}-installer.jar"
         console.print(f"\n[bold]Downloading Forge installer...")
         download_file(installer_url, installer_jar, label="forge-installer.jar")
+
     else:
         # Fabric path
         console.print("[cyan]Resolving Fabric versions...")
@@ -53,22 +69,22 @@ def build_artifacts(config: PackConfig, output_dir: Path, cache_dir: Path) -> tu
         console.print(f"\n[bold]Downloading Fabric server JAR...")
         download_file(server_jar_url, server_jar, label="fabric-server.jar")
 
-    # Download server mods
+    # Resolve server mods
     server_mods_dir = cache_dir / "server_mods"
-    console.print(f"\n[bold]Downloading server mods ({len(config.server_mods())} files)...")
-    server_mod_paths = download_mods(config.server_mods(), server_mods_dir, label_prefix="[server] ")
+    console.print(f"\n[bold]Resolving server mods ({len(config.server_mods())} files)...")
+    server_mod_paths = download_mods(config.server_mods(), server_mods_dir, label_prefix="[server] ", pack_dir=pack_dir)
 
-    # Download client mods
+    # Resolve client mods
     client_mods_dir = cache_dir / "client_mods"
-    console.print(f"\n[bold]Downloading client mods ({len(config.client_mods())} files)...")
-    client_mod_paths = download_mods(config.client_mods(), client_mods_dir, label_prefix="[client] ")
+    console.print(f"\n[bold]Resolving client mods ({len(config.client_mods())} files)...")
+    client_mod_paths = download_mods(config.client_mods(), client_mods_dir, label_prefix="[client] ", pack_dir=pack_dir)
 
     # Download shader packs
     shader_pack_paths = []
     if config.shader_packs:
         shader_packs_dir = cache_dir / "shaderpacks"
         console.print(f"\n[bold]Downloading shader packs ({len(config.shader_packs)} files)...")
-        shader_pack_paths = download_mods(config.shader_packs, shader_packs_dir, label_prefix="[shader] ")
+        shader_pack_paths = download_mods(config.shader_packs, shader_packs_dir, label_prefix="[shader] ", pack_dir=pack_dir)
 
     manifest = {
         "name": config.name,
@@ -97,7 +113,7 @@ def build_artifacts(config: PackConfig, output_dir: Path, cache_dir: Path) -> tu
     # Create server artifact
     server_artifact = output_dir / "server.tar.xz"
     console.print(f"\n[bold]Creating server.tar.xz...")
-    if config.mod_loader == "forge":
+    if config.mod_loader in ("forge", "neoforge"):
         create_forge_server_artifact(installer_jar, server_mod_paths, manifest, server_artifact)
     else:
         create_server_artifact(server_jar, server_mod_paths, manifest, server_artifact)
@@ -135,7 +151,7 @@ def build(config_file: str, output: str, cache: str):
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        server_artifact, client_artifact = build_artifacts(config, output_dir, cache_dir)
+        server_artifact, client_artifact = build_artifacts(config, output_dir, cache_dir, pack_dir=Path(config_file).parent.resolve())
         console.print(Panel(
             f"[green bold]Build complete![/]\n\n"
             f"[cyan]Server:[/] {server_artifact}\n"
@@ -170,7 +186,7 @@ def publish(config_file: str, tag: str, repo: str | None, output: str, cache: st
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        server_artifact, client_artifact = build_artifacts(config, output_dir, cache_dir)
+        server_artifact, client_artifact = build_artifacts(config, output_dir, cache_dir, pack_dir=Path(config_file).parent.resolve())
         console.print(f"\n[bold]Publishing to GitHub release {tag}...")
         publish_release(
             tag=tag,
