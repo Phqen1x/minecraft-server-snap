@@ -109,7 +109,7 @@ jobs:
       - name: Checkout launcher template
         uses: actions/checkout@v6
         with:
-          repository: kenvandine/minecraft-server-snap
+          repository: Phqen1x/minecraft-server-snap
           sparse-checkout: launcher
 
       - uses: actions/download-artifact@v8
@@ -162,7 +162,7 @@ jobs:
       - name: Checkout launcher template
         uses: actions/checkout@v6
         with:
-          repository: kenvandine/minecraft-server-snap
+          repository: Phqen1x/minecraft-server-snap
           sparse-checkout: launcher
 
       - uses: actions/download-artifact@v8
@@ -226,7 +226,7 @@ jobs:
       - name: Checkout launcher template
         uses: actions/checkout@v6
         with:
-          repository: kenvandine/minecraft-server-snap
+          repository: Phqen1x/minecraft-server-snap
           sparse-checkout: launcher
 
       - uses: actions/download-artifact@v8
@@ -292,7 +292,7 @@ jobs:
 
             ### Installing
 
-            **Server** (requires the [minecraft-server snap](https://github.com/kenvandine/minecraft-server-snap)):
+            **Server** (requires the [minecraft-server snap](https://github.com/Phqen1x/minecraft-server-snap)):
             ```bash
             sudo minecraft-server.install-pack <server.tar.xz URL>
             sudo snap restart minecraft-server.server
